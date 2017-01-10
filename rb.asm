@@ -1,5 +1,5 @@
 ;
-;  Copyright © 2016 Odzhan, Peter Ferrie. All Rights Reserved.
+;  Copyright © 2016-2017 Odzhan, Peter Ferrie. All Rights Reserved.
 ;
 ;  Redistribution and use in source and binary forms, with or without
 ;  modification, are permitted provided that the following conditions are
@@ -30,7 +30,7 @@
 ; -----------------------------------------------
 ; Rabbit stream cipher in x86 assembly
 ;
-; size: 502 bytes
+; size: 458 bytes
 ;
 ; global calls use cdecl convention
 ;
@@ -54,12 +54,12 @@
 RABBIT_next_state:
 _RABBIT_next_state:
     pushad                   ; save registers
-    mov    esi, [esp+32+4]   ; esi = state
-    pushad                   ; alloc 32-bytes for x-values
+    mov    edi, 0x4D34D34D
+    mov    esi, 0xD34D34D3
+    mov    ebp, 0x34D34D34
+    pushad                   ; alloc 32-bytes for x-values, init first three of them
+    mov    esi, [esp+64+4]   ; esi = state
     mov    edi, esp
-    mov    dword[edi+0*4], 0x4D34D34D
-    mov    dword[edi+1*4], 0xD34D34D3
-    mov    dword[edi+2*4], 0x34D34D34
     ; Calculate new counter values
     xor    ecx, ecx             ; i = 0 
 rs_l0:
@@ -141,65 +141,94 @@ _RABBIT_setkeyx:
     ; --------------------------------
     ; Generate initial state variables
     ; --------------------------------
-    mov    [edi+4*0], eax
-    mov    [edi+4*2], ebx
-    mov    [edi+4*4], ecx
-    mov    [edi+4*6], edx
-    
-    rol    eax, 16
-    rol    ebx, 16
-    rol    ecx, 16
-    rol    edx, 16
-    
+    pushad
+    stosd
+
     ; c->m.x[1] = U32V(k3<<16) | (k2>>16);
     mov    ebp, edx
-    mov    bp, cx
-    mov    [edi+4*1], ebp
+    shld   ebp, ecx, 16
+    xchg   ebp, eax
+    stosd
+
+    xchg   ebx, eax
+    stosd
+
     ; c->m.x[3] = U32V(k0<<16) | (k3>>16);
-    mov    ebp, eax
-    mov    bp, dx
-    mov    [edi+4*3], ebp
+    mov    ebx, ebp
+    shld   ebx, edx, 16
+    xchg   ebx, eax
+    stosd
+
+    xchg   ecx, eax
+    stosd
+
     ; c->m.x[5] = U32V(k1<<16) | (k0>>16);
-    mov    ebp, ebx
-    mov    bp, ax
-    mov    [edi+4*5], ebp
+    mov    ecx, ebx
+    shld   ecx, ebp, 16
+    xchg   ecx, eax
+    stosd
+
+    xchg   edx, eax
+    stosd
+
     ; c->m.x[7] = U32V(k2<<16) | (k1>>16);
-    mov    ebp, ecx
-    mov    bp, bx
-    mov    [edi+4*7], ebp
+    mov    edx, ecx
+    shld   edx, ebx, 16
+    xchg   edx, eax
+    stosd
+    
     ; -------------------------------
     ; Generate initial counter values
     ; -------------------------------
-    mov    [edi+4*0+32], ecx
-    mov    [edi+4*2+32], edx
-    mov    [edi+4*4+32], eax
-    mov    [edi+4*6+32], ebx
-    
-    rol    eax, 16
-    rol    ebx, 16
     rol    ecx, 16
-    rol    edx, 16
-    
+    xchg   ecx, eax
+    stosd
+
     ; c->m.c[1] = (k0&0xFFFF0000) | (k1&0xFFFF);
-    mov    ebp, eax
-    mov    ax, bx           ; k1.lo
-    mov    [edi+4*1+32], eax
+    xchg   ebp, eax         ; k1.lo
+    xchg   bx, ax
+    stosd
+
+    rol    edx, 16
+    xchg   edx, eax
+    stosd
+
     ; c->m.c[3] = (k1&0xFFFF0000) | (k2&0xFFFF);
-    mov    bx, cx           ; k2.lo
-    mov    [edi+4*3+32], ebx   
+    rol    ecx, 16          ; k2.lo
+    xchg   ecx, eax
+    stosd
+
+    xchg   edx, eax
+    xchg   bx, ax
+    rol    eax, 16
+    stosd
+
     ; c->m.c[5] = (k2&0xFFFF0000) | (k3&0xFFFF);
-    mov    cx, dx           ; k3.lo
-    mov    [edi+4*5+32], ecx    
+    xchg   ecx, eax         ; k3.lo
+    xchg   bp, ax
+    rol    eax, 16
+    stosd
+
+    xchg   edx, eax
+    xchg   bx, ax
+    rol    eax, 16
+    stosd
+
     ; c->m.c[7] = (k3&0xFFFF0000) | (k0&0xFFFF);
-    mov    dx, bp           ; k0.lo
-    mov    [edi+4*7+32], edx
+    xchg   ecx, eax         ; k0.lo
+    xchg   bp, ax
+    rol    eax, 16
+    stosd
     
-    xor    ecx, ecx
-    and    dword[edi+64], ecx
+    xor    eax, eax
+    stosd
+    popad
+
     ; -----------------------------
     ; Iterate the system four times
     ; -----------------------------
-    mov    cl, 4
+    push   4
+    pop    ecx
 rsk_l0:
     push   edi
     call   RABBIT_next_state
@@ -239,23 +268,22 @@ _RABBIT_setivx:
     pushad
     mov    edx, [esp+32+4]   ; ctx
     mov    esi, [esp+32+8]   ; iv
-    pushad                   ; create sv variable (32 bytes)
     ; Generate four subvectors
     lodsd
-    mov    [esp], eax        ; sv[0] = v->d[0];
-    xchg   eax, ebx
+    xchg   edi, eax          ; sv[0] = v->d[0];
     lodsd
-    mov    [esp+8], eax      ; sv[2] = v->d[1];
+    xchg   ebp, eax          ; sv[2] = v->d[1];
+
+    pushad                   ; create sv variable (32 bytes), init first and third
+
+    ror    edi, 16           ; sv[0] >> 16
     
-    ror    ebx, 16           ; sv[0] >> 16
+    xchg   ebp, eax          ; sv[1] = (sv[0]>>16) | (sv[2]&0xFFFF0000);
+    xchg   di, ax
+    mov    [esp+4], eax
     
-    mov    ecx, eax          ; sv[1] = (sv[0]>>16) | (sv[2]&0xFFFF0000);
-    mov    cx, bx
-    mov    [esp+4], ecx
-    
-    mov    bx, ax            ; sv[3] = (sv[2]<<16) | (sv[0]&0x0000FFFF);
-    ror    ebx, 16
-    mov    [esp+12], ebx
+    ror    edi, 16           ; sv[3] = (sv[2]<<16) | (sv[0]&0x0000FFFF);
+    mov    [esp+12], edi
     ; Modify counter values
     xor    ecx, ecx
 rsv_l0:
@@ -326,24 +354,18 @@ rc_l1:
     mov    ecx, [ebx+3*4]    ; ecx = c->w.x[3]
     mov    edx, [ebx+5*4]    ; edx = c->w.x[5]
     mov    ebp, [ebx+7*4]    ; ebp = c->w.x[7]
-    
-    ; x.d[0] ^= (c->w.x[5]>>16) ^ (c->w.x[3]<<16);
-    ror    edx, 16       ; x5 >> 16
     mov    eax, ecx
-    shl    eax, 16       ; x3 << 16
-    mov    ax, dx
-    xor    [edi+4*0], eax
+    ; x.d[0] ^= (c->w.x[5]>>16) ^ (c->w.x[3]<<16);
+    shld   ecx, edx, 16  ; x5 >> 16, x3 << 16
+    xor    [edi+4*0], ecx
     ; x.d[1] ^= (c->w.x[7]>>16) ^ (c->w.x[5]<<16);
-    ror    ebp, 16
-    mov    dx, bp
+    shld   edx, ebp, 16
     xor    [edi+4*1], edx
     ; x.d[2] ^= (c->w.x[1]>>16) ^ (c->w.x[7]<<16);
-    ror    esi, 16
-    mov    bp, si
+    shld   ebp, esi, 16
     xor    [edi+4*2], ebp
     ; x.d[3] ^= (c->w.x[3]>>16) ^ (c->w.x[1]<<16);
-    ror    ecx, 16
-    mov    si, cx
+    shld   esi, eax, 16
     xor    [edi+4*3], esi
     popad
     
@@ -359,7 +381,8 @@ rc_l2:
     inc    esi               ; in++
     dec    edx               ; i--
     loopnz rc_l2             ; break if --len==0 or i==0
-    jmp    rc_l0
+    inc    ecx
+    loop   rc_l0
 rc_l3:
     popad                    ; free stack
     popad                    ; restore registers
