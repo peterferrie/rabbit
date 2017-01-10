@@ -3,6 +3,7 @@
 // test unit for Rabbit stream cipher
 // odzhan
 
+#include <stdio.h>
 #include "rabbit.h"
 
 uint8_t tv_key[16]={0};

@@ -30,7 +30,7 @@
 ; -----------------------------------------------
 ; Rabbit stream cipher in x86 assembly
 ;
-; size: 458 bytes
+; size: 457 bytes
 ;
 ; global calls use cdecl convention
 ;
@@ -381,8 +381,7 @@ rc_l2:
     inc    esi               ; in++
     dec    edx               ; i--
     loopnz rc_l2             ; break if --len==0 or i==0
-    inc    ecx
-    loop   rc_l0
+    jmp    rc_l0
 rc_l3:
     popad                    ; free stack
     popad                    ; restore registers
