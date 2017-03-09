@@ -31,6 +31,7 @@
 #define RABBIT_H
 
 #include <stdint.h>
+#include <string.h>
 
 #define U8V(v)  ((uint8_t)(v)  & 0xFFU)
 #define U16V(v) ((uint16_t)(v) & 0xFFFFU)

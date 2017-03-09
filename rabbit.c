@@ -38,7 +38,6 @@ __declspec(naked) uint32_t RABBIT_g_func(uint32_t x)
 uint32_t RABBIT_g_func(uint32_t x)
 #endif
 {
-  uint32_t h;
    #ifndef _WIN64
    __asm {
      mov    eax, [esp+4]
@@ -48,6 +47,7 @@ uint32_t RABBIT_g_func(uint32_t x)
      ret
    };
    #elif _WIN64
+   uint32_t h;   
    uint64_t sum = U64V(x) * x;
 
    h = U32V((sum >> 32) ^ (sum & 0xFFFFFFFF));
@@ -179,7 +179,7 @@ void RABBIT_setiv(RABBIT_ctx *c, const void* iv)
 // Encrypt/decrypt a message of any size
 void RABBIT_crypt(RABBIT_ctx *c, void* input, uint32_t inlen)
 {
-   uint32_t   i, len;
+   uint32_t   i;
    rabbit_blk x;
    uint8_t    *in=(uint8_t*)input;
 
