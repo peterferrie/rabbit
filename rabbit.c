@@ -32,69 +32,69 @@
 // Square a 32-bit unsigned integer to
 // obtain the 64-bit result and return
 // the upper 32 bits XOR the lower 32 bits
-#ifndef _WIN64
+#if defined(_M_IX86)
 __declspec(naked) uint32_t RABBIT_g_func(uint32_t x)
 #else
 uint32_t RABBIT_g_func(uint32_t x)
 #endif
 {
-   #ifndef _WIN64
-   __asm {
-     mov    eax, [esp+4]
-     xor    edx, edx
-     mul    eax
-     xor    eax, edx
-     ret
-   };
-   #elif _WIN64
-   uint32_t h;   
-   uint64_t sum = U64V(x) * x;
+  uint32_t h; 
+  #if defined(_M_IX86) && !defined(__GNUC__)
+  __asm {
+    mov    eax, [esp+4]
+    xor    edx, edx
+    mul    eax
+    xor    eax, edx
+    ret
+  };
+  #elif _M_X64 
+  uint64_t sum = U64V(x) * x;
 
-   h = U32V((sum >> 32) ^ (sum & 0xFFFFFFFF));
-   return h;
-   #else
-   uint32_t a, b, l;
-   // Construct high and low argument for squaring
-   a = x & 0xFFFF;
-   b = x >> 16;
+  h = U32V((sum >> 32) ^ (sum & 0xFFFFFFFF));
+  return h;
+  #else
+  uint32_t a, b, l;
+  // Construct high and low argument for squaring
+  a = x & 0xFFFF;
+  b = x >> 16;
 
-   // Calculate high and low result of squaring
-   h = (((U32V(a * a) >> 17) + U32V(a * b)) >> 15) + b * b;
-   l = x * x;
+  // Calculate high and low result of squaring
+  h = (((U32V(a * a) >> 17) + U32V(a * b)) >> 15) + b * b;
+  l = x * x;
 
-   h ^= l;
-   // Return high XOR low
-   return h;
-   #endif
+  h ^= l;
+  // Return high XOR low
+  return h;
+  #endif
 }
 
 // Calculate the next internal state
 void RABBIT_next_state(RABBIT_state *s)
 {
-   uint32_t g[8], j, t;
-   uint32_t x[]={0x4D34D34D, 0xD34D34D3, 0x34D34D34};
-   int      i;
+  uint32_t g[8], j, t;
+  uint32_t x[3]={0x4D34D34D, 0xD34D34D3, 0x34D34D34};
+  int      i;
 
-   // Calculate new counter values
-   for (i=0; i<8; i++) {
-       t       = s->c[i];
-       s->c[i] = s->c[i] + x[i % 3] + s->carry;
-       s->carry = s->c[i] < t;
-   }
+  // Calculate new counter values
+  for (i=0; i<8; i++) {
+    t        = s->c[i];
+    s->c[i]  = s->c[i] + x[i % 3] + s->carry;
+    s->carry = s->c[i] < t;
+  }
 
-   // Calculate the g-values
-   for (i=0; i<8; i++) {
-       g[i] = RABBIT_g_func(s->x[i] + s->c[i]);
-   }
+  // Calculate the g-values
+  for (i=0; i<8; i++) {
+    g[i] = RABBIT_g_func(s->x[i] + s->c[i]);
+  }
 
-   // Calculate new state values
-   for (i=0, j=7; i<8;) {
-       s->x[i] =t= U32V(g[i] + ROTL32(g[j], 16) + ROTL32(g[j-1], 16));
-       i++; j++;
-       s->x[i] =t= U32V(g[i] + ROTL32(g[j & 7], 8) + g[j-1]);
-       i++; j++;
-       j &= 7;
-   }
+  // Calculate new state values
+  for (i=0, j=7; i<8;) {
+    s->x[i] =t= U32V(g[i] + ROTL32(g[j], 16) + ROTL32(g[j-1], 16));
+    i++; j++;
+    s->x[i] =t= U32V(g[i] + ROTL32(g[j & 7], 8) + g[j-1]);
+    i++; j++;
+    j &= 7;
+  }
 }
 
 // Key setup
@@ -179,30 +179,30 @@ void RABBIT_setiv(RABBIT_ctx *c, const void* iv)
 // Encrypt/decrypt a message of any size
 void RABBIT_crypt(RABBIT_ctx *c, void* input, uint32_t inlen)
 {
-   uint32_t   i;
-   rabbit_blk x;
-   uint8_t    *in=(uint8_t*)input;
+  uint32_t   i;
+  rabbit_blk x;
+  uint8_t    *in=(uint8_t*)input;
 
-   for (;;)
-   {
-     // break on zero length
-     if (inlen==0) break;
+  for (;;)
+  {
+   // break on zero length
+   if (inlen==0) break;
 
-     // update state
-     RABBIT_next_state(&c->w);
+   // update state
+   RABBIT_next_state(&c->w);
 
-     for (i=0; i<4; i++) {
-       x.d[i] = c->w.x[i<<1];
-     }
-
-     x.d[0] ^= (c->w.x[5]>>16) ^ (c->w.x[3]<<16);
-     x.d[1] ^= (c->w.x[7]>>16) ^ (c->w.x[5]<<16);
-     x.d[2] ^= (c->w.x[1]>>16) ^ (c->w.x[7]<<16);
-     x.d[3] ^= (c->w.x[3]>>16) ^ (c->w.x[1]<<16);
-
-     for (i=0; i<16 && inlen!=0; i++) {
-       *in++ ^= x.b[i];
-       inlen--;
-     }
+   for (i=0; i<4; i++) {
+     x.d[i] = c->w.x[i<<1];
    }
+
+   x.d[0] ^= (c->w.x[5]>>16) ^ (c->w.x[3]<<16);
+   x.d[1] ^= (c->w.x[7]>>16) ^ (c->w.x[5]<<16);
+   x.d[2] ^= (c->w.x[1]>>16) ^ (c->w.x[7]<<16);
+   x.d[3] ^= (c->w.x[3]>>16) ^ (c->w.x[1]<<16);
+
+   for (i=0; i<16 && inlen!=0; i++) {
+     *in++ ^= x.b[i];
+     inlen--;
+   }
+  }
 }
